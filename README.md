@@ -1,102 +1,149 @@
-﻿# PatchPilot
+<div align="center">
 
-PatchPilot is a lightweight security scanning and remediation project that lets you upload a codebase (ZIP) or import a GitHub repository URL, run multiple security scanners, and generate an evidence pack for reporting/compliance.
+# 🛡️ PatchPilot
 
-What it does:
+**Automated code security triage — scan, fix, verify, and export compliance evidence. All local. All free.**
 
-- **Scan**: run SAST + dependency + secret scanning
-- **Fix**: propose remediations for selected findings
-- **Verify**: run verification checks in a sandboxed workflow
-- **Evidence Pack**: export a ZIP containing audit artifacts and diffs
+[![CI](https://github.com/ionfwsrijan/PatchPilot/actions/workflows/ci.yml/badge.svg)](https://github.com/ionfwsrijan/PatchPilot/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![Node](https://img.shields.io/badge/node-18%2B-green)](https://nodejs.org/)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-## Features
+</div>
 
-- Upload a **ZIP** codebase and scan it
-- Import a **GitHub repository URL** and scan it (server-side download)
-- Aggregates findings from:
-  - **Semgrep** (SAST)
-  - **OSV-Scanner** (dependency vulnerabilities)
-  - **Gitleaks** (secret detection)
-- Simple prioritization/sorting by severity + category
-- Generate an **Evidence Pack** ZIP (audit trail)
-- Frontend UI built with **React + Vite + Tailwind**
+---
 
-## Repository Structure
+PatchPilot lets you upload a codebase (ZIP) or import a GitHub repository URL, run multiple security scanners in one shot, get proposed fixes, verify them, and download a compliance evidence pack — without paying for any external service.
 
-- `backend/` — FastAPI API server
-- `frontend/` — React/Vite web UI
+## What it does
 
-## API Routes (Backend)
+| Step | What happens |
+|---|---|
+| **Scan** | Runs SAST + dependency + secret scanning in parallel |
+| **Fix** | Proposes remediations for selected findings |
+| **Verify** | Re-runs checks to confirm fixes didn't introduce new issues |
+| **Evidence Pack** | Exports a ZIP with audit artifacts and diffs for compliance |
 
-- `GET /health` — health check
-- `POST /scan` — upload ZIP and scan  
-  **FormData**: `project` (file), `project_name` (optional)
-- `POST /scan-url` — import GitHub repo URL and scan  
-  **FormData**: `repo_url`, `ref` (optional, default `main`), `project_name` (optional)
-- `POST /fix` — generate proposed fixes  
-  **JSON**: `{ "job_id": "...", "finding_ids": ["..."] }`
-- `POST /verify` — verify repository  
-  **FormData**: `job_id`
-- `POST /evidence-pack` — build evidence pack ZIP  
-  **FormData**: `job_id`, `project_name` (optional)
-- `DELETE /jobs/{job_id}` — delete job workspace
+## Scanners
 
-## Prerequisites
+- [Semgrep](https://semgrep.dev/) — static analysis (SAST)
+- [OSV-Scanner](https://google.github.io/osv-scanner/) — dependency vulnerabilities
+- [Gitleaks](https://github.com/gitleaks/gitleaks) — secret detection
 
-### Backend
+Everything runs locally. No data leaves your machine.
 
-- Python 3.10+ recommended
-- CLI tools available on `PATH`:
-  - `semgrep`
-  - `osv-scanner`
-  - `gitleaks`
+---
 
-> Note: If `osv-scanner` can’t find any supported dependency manifests/lockfiles, it may produce no dependency findings.
+## Quickstart
 
-### Frontend
+### Prerequisites
 
-- Node.js 18+ recommended
-- npm (or pnpm/yarn)
+**Backend**
+- Python 3.10+
+- `semgrep`, `osv-scanner`, and `gitleaks` available on `PATH`
 
-## Setup & Run
+**Frontend**
+- Node.js 18+
 
-### 1) Backend
+### 1 — Backend
 
 ```bash
 cd backend
-
 python -m venv .venv
-# Windows:
-.venv\Scripts\activate
-# macOS/Linux:
-source .venv/bin/activate
-
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-
-# Run FastAPI (default: http://localhost:8000)
 uvicorn app.main:app --reload --port 8000
 ```
 
-### 2) Frontend
+### 2 — Frontend
 
 ```bash
 cd frontend
 npm install
-
-# Point frontend to backend (optional if default is localhost:8000)
-# create/edit frontend/.env:
-# VITE_API_BASE_URL=http://localhost:8000
-
 npm run dev
 ```
 
-Open the UI at the Vite dev server URL (commonly `http://localhost:5173`).
+Open `http://localhost:5173` in your browser.
 
-## Usage
+### 3 — Run your first scan
 
 1. Go to **Dashboard**
-2. Choose one:
-   - **Browse Files** → upload a ZIP
-   - **Import from URL** → paste a GitHub repo URL
-3. View results in **Findings**
+2. Upload a ZIP or paste a GitHub repo URL
+3. View findings in the **Findings** tab
 4. Go to **Verify** to generate and download an **Evidence Pack**
+
+---
+
+## API reference
+
+| Method | Route | Description |
+|---|---|---|
+| `GET` | `/health` | Health check |
+| `POST` | `/scan` | Upload ZIP and scan |
+| `POST` | `/scan-url` | Import GitHub repo URL and scan |
+| `POST` | `/fix` | Generate proposed fixes |
+| `POST` | `/verify` | Verify fixes |
+| `POST` | `/evidence-pack` | Build and download evidence ZIP |
+| `DELETE` | `/jobs/{job_id}` | Delete a job workspace |
+
+**`POST /scan`** — FormData: `project` (file), `project_name` (optional)
+
+**`POST /scan-url`** — FormData: `repo_url`, `ref` (optional, default `main`), `project_name` (optional)
+
+**`POST /fix`** — JSON: `{ "job_id": "...", "finding_ids": ["..."] }`
+
+---
+
+## ML roadmap
+
+PatchPilot is being transformed from a rule-based scanner into an intelligent, self-improving security platform — layer by layer. All models use free, locally-running tools (no API keys).
+
+| Tier | Focus | Status |
+|---|---|---|
+| **Tier 1 — Triage** | Persist findings to SQLite · Severity ranker · Embedding deduplicator · False positive classifier | 🟡 Open for contributions |
+| **Tier 2 — Predictive** | Fix success predictor · Pattern clusterer · Exploit likelihood scorer | 🔒 Requires Tier 1 |
+| **Tier 3 — Autonomous** | Local LLM patch generation (Ollama) · Self-healing verify loop · RL reward signal | 🔒 Requires Tier 2 |
+
+Each tier feeds training data into the next. See [CONTRIBUTING.md](CONTRIBUTING.md#ml-roadmap) for how to pick up a Tier 1 issue.
+
+---
+
+## Repository structure
+
+```
+PatchPilot/
+├── backend/               # FastAPI server (Python)
+│   ├── app/
+│   │   ├── main.py        # API routes
+│   │   └── ml/            # ML models (Tier 1+ contributions go here)
+│   ├── scripts/           # Training and utility scripts
+│   └── requirements.txt
+├── frontend/              # React + Vite + Tailwind (TypeScript)
+│   └── src/
+├── .github/
+│   ├── ISSUE_TEMPLATE/    # Bug, feature, and ML issue templates
+│   └── workflows/         # CI (backend lint + frontend build)
+├── CONTRIBUTING.md
+├── SECURITY.md
+├── CHANGELOG.md
+└── LICENSE
+```
+
+---
+
+## Contributing
+
+Contributions are welcome — especially ML components advancing the roadmap above.
+
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, branch conventions, code style, and the ML contribution guide.
+
+For questions and ideas, open a [Discussion](https://github.com/ionfwsrijan/PatchPilot/discussions) rather than an issue.
+
+## Security
+
+Found a vulnerability in PatchPilot itself? Please **do not** open a public issue. Read [SECURITY.md](SECURITY.md) for the responsible disclosure process.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
