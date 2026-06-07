@@ -589,23 +589,23 @@ async def leaderboard_endpoint():
 async def update_leaderboard_endpoint(req: LeaderboardUpdateRequest):
     pattern = r"(?i)(?:close|closes|closed|fix|fixes|fixed|resolve|resolves|resolved)\s+#(\d+)"
     matches = re.findall(pattern, req.pr_description)
-    
+
     findings_closed = len(set(matches))
     prs_merged = 1 if req.is_pr_merged else 0
-    
+
     await upsert_contributor_stat(
         username=req.github_username,
         findings=findings_closed,
         fixes=req.fixes_passed,
-        prs=prs_merged
+        prs=prs_merged,
     )
-    
+
     return {
         "status": "success",
         "github_username": req.github_username,
         "stats_added": {
             "findings_closed": findings_closed,
             "fixes_passed": req.fixes_passed,
-            "prs_merged": prs_merged
-        }
+            "prs_merged": prs_merged,
+        },
     }

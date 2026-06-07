@@ -210,10 +210,13 @@ async def get_leaderboard_stats():
         return [dict(row) for row in rows]
 
 
-async def upsert_contributor_stat(username: str, findings: int = 0, fixes: int = 0, prs: int = 0):
+async def upsert_contributor_stat(
+    username: str, findings: int = 0, fixes: int = 0, prs: int = 0
+):
     """Increments a contributor's stats. Creates the row if they don't exist."""
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("""
+        await db.execute(
+            """
             INSERT INTO contributor_stats 
                 (github_username, findings_closed, fixes_passed, prs_merged, last_updated)
             VALUES 
@@ -223,5 +226,7 @@ async def upsert_contributor_stat(username: str, findings: int = 0, fixes: int =
                 fixes_passed = fixes_passed + excluded.fixes_passed,
                 prs_merged = prs_merged + excluded.prs_merged,
                 last_updated = datetime('now')
-        """, (username, findings, fixes, prs))
+        """,
+            (username, findings, fixes, prs),
+        )
         await db.commit()
