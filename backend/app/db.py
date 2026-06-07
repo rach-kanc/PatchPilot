@@ -41,6 +41,15 @@ async def init_db():
                 verified_at TEXT DEFAULT (datetime('now'))
             )
         """)
+
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("PRAGMA table_info(findings)")
+        columns = [row["name"] for row in await cursor.fetchall()]
+
+        if "package_name" not in columns:
+            await db.execute("ALTER TABLE findings ADD COLUMN package_name TEXT")
+            await db.execute("ALTER TABLE findings ADD COLUMN package_version TEXT")
+
         await db.commit()
 
 
@@ -111,9 +120,19 @@ async def get_cwe_distribution():
 async def get_dependency_diff():
     async with aiosqlite.connect(DB_PATH) as db:
         db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            "SELECT job_id, project_name FROM jobs ORDER BY created_at DESC LIMIT 1"
+        )
+        latest_job = await cursor.fetchone()
+
+        if not latest_job:
+            return {"introduced": [], "resolved": [], "persistent": []}
+
+        target_project = latest_job["project_name"]
 
         cursor = await db.execute(
-            "SELECT job_id FROM jobs ORDER BY created_at DESC LIMIT 2"
+            "SELECT job_id FROM jobs WHERE project_name = ? ORDER BY created_at DESC LIMIT 2",
+            (target_project,),
         )
         jobs = await cursor.fetchall()
 
