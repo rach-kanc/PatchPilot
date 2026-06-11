@@ -9,34 +9,43 @@ import uuid
 from pathlib import Path
 from typing import List
 
-
 import httpx
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel
 
+from app.ml.ranker import load_ranker, scoring_function
+
 from .db import (
-    init_db,
-    get_db,
-    get_trend_data,
     get_cwe_distribution,
+    get_db,
     get_dependency_diff,
     get_leaderboard_stats,
+    get_trend_data,
+    init_db,
     upsert_contributor_stat,
 )
-from .models import ScanResponse, Finding, FixRequest, FixResponse, VerifyResponse
+from .models import (
+    Finding,
+    FixRequest,
+    FixResponse,
+    Location,
+    ScanResponse,
+    VerifyResponse,
+)
 from .remediation.engine import propose_fixes
 from .reports.evidence_pack import build_evidence_pack
+from .reports.pdf_builder import generate_audit_pdf
 from .sandbox.verify import verify_repo
+from .scanners.entropy import run_entropy
 from .scanners.gitleaks import run_gitleaks
 from .scanners.osv import run_osv_scanner
-from .scanners.entropy import run_entropy
 from .scanners.semgrep import run_semgrep
 from .utils.fs import ensure_dir, safe_rmtree, unzip_to_dir
 
 _MAX_UPLOAD_MB_RAW = os.environ.get("MAX_UPLOAD_MB")
+RANKER = load_ranker()
 
 try:
     MAX_UPLOAD_MB = int(_MAX_UPLOAD_MB_RAW) if _MAX_UPLOAD_MB_RAW else 100
@@ -76,11 +85,11 @@ def health():
         "gitleaks": shutil.which("gitleaks") is not None,
     }
 
-    status = "ok" if all(scanners.values()) else "degraded"
+    healthy = all(scanners.values())
 
     return {
-        "ok": True,
-        "status": status,
+        "ok": healthy,
+        "status": "healthy" if healthy else "degraded",
         "scanners": scanners,
     }
 
@@ -108,7 +117,15 @@ def _scan_repo_dir(repo_dir: Path):
     findings.extend(gitleaks)
     findings.extend(entropy)
 
-    findings = _prioritize_findings(findings)
+    findings = scoring_function(findings, RANKER)
+
+    if RANKER:
+        findings.sort(
+            key=lambda f: getattr(f, "ml_score", 0.0),
+            reverse=True,
+        )
+    else:
+        findings = _prioritize_findings(findings)
 
     return semgrep, osv, gitleaks, entropy, findings
 
@@ -146,17 +163,63 @@ def github_zip_url(repo_url: str, ref: str = "main") -> str:
     return f"https://github.com/{owner}/{repo}/archive/refs/heads/{ref}.zip"
 
 
+ALLOWED_REDIRECT_HOSTS = {
+    "github.com",
+    "codeload.github.com",
+    "objects.githubusercontent.com",
+}
+
+MAX_REDIRECTS = 5
+
+
 async def download_to_path(url: str, dest_path: Path) -> None:
+    """
+    Download *url* to *dest_path*, following redirects only to hosts in
+    ALLOWED_REDIRECT_HOSTS.  Blindly following redirects (follow_redirects=True)
+    would allow a crafted URL to redirect the server to an internal address
+    (e.g. cloud-metadata at 169.254.169.254), enabling SSRF.
+    """
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     timeout = httpx.Timeout(120.0, connect=30.0)
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
-        r = await client.get(url)
-        if r.status_code != 200:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Failed to download repo ZIP ({r.status_code}).",
-            )
-        dest_path.write_bytes(r.content)
+
+    current_url = url
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
+        for _ in range(MAX_REDIRECTS):
+            parsed = httpx.URL(current_url)
+            if parsed.host not in ALLOWED_REDIRECT_HOSTS:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        f"Redirect to disallowed host '{parsed.host}' was blocked. "
+                        f"Only {sorted(ALLOWED_REDIRECT_HOSTS)} are permitted."
+                    ),
+                )
+
+            r = await client.get(current_url)
+
+            if r.status_code in (301, 302, 303, 307, 308):
+                location = r.headers.get("location")
+                if not location:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Redirect response missing Location header.",
+                    )
+                current_url = str(r.headers["location"])
+                continue
+
+            if r.status_code != 200:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Failed to download repo ZIP ({r.status_code}).",
+                )
+
+            dest_path.write_bytes(r.content)
+            return
+
+    raise HTTPException(
+        status_code=400,
+        detail=f"Too many redirects (max {MAX_REDIRECTS}) while downloading repo ZIP.",
+    )
 
 
 def _maybe_use_single_top_folder(repo_dir: Path) -> Path:
@@ -479,6 +542,75 @@ def evidence_pack(job_id: str = Form(...), project_name: str = Form("project")):
     )
     return FileResponse(
         path=str(pack_path), filename=pack_path.name, media_type="application/zip"
+    )
+
+
+@app.get("/api/scans/{job_id}/report/pdf", tags=["Reports"])
+async def download_audit_pdf(job_id: str):
+    db = await get_db()
+    try:
+        cur = await db.execute(
+            "SELECT project_name FROM jobs WHERE job_id = ?", (job_id,)
+        )
+        job_row = await cur.fetchone()
+
+        if job_row is None:
+            raise HTTPException(
+                status_code=404, detail=f"No job found with id '{job_id}'"
+            )
+
+        project_name = job_row[0]
+
+        cur = await db.execute(
+            """
+            SELECT id, rule_id, severity, category, file_path, line_number, message
+            FROM findings
+            WHERE job_id = ?
+            """,
+            (job_id,),
+        )
+        columns = [col[0] for col in cur.description]
+        rows = await cur.fetchall()
+    finally:
+        await db.close()
+
+    findings_list = []
+    for row in rows:
+        row_dict = dict(zip(columns, row))
+
+        loc = None
+        if row_dict["file_path"]:
+            loc = Location(
+                path=row_dict["file_path"], start_line=row_dict["line_number"]
+            )
+
+        findings_list.append(
+            Finding(
+                id=row_dict["id"],
+                title=row_dict["rule_id"] or "Unknown",
+                severity=row_dict["severity"] or "INFO",
+                category=row_dict["category"] or "Unknown",
+                location=loc,
+                description=row_dict["message"] or "",
+            )
+        )
+
+    scan_data = ScanResponse(
+        job_id=job_id,
+        project_name=project_name,
+        repo_path="Repository",
+        findings=findings_list,
+        scanners={},
+    )
+
+    pdf_bytes = generate_audit_pdf(scan_data)
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename=PatchPilot-Audit-{job_id}.pdf"
+        },
     )
 
 
