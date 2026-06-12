@@ -249,6 +249,10 @@ export function Dashboard() {
 
     setScanError(null);
     setScanLoading(true);
+    if (eventSource) {
+      eventSource.close();
+      setEventSource(null);
+    }
 
     try {
       const data = await scanOrganization(url);
@@ -260,7 +264,7 @@ export function Dashboard() {
 
       const sse = new EventSource(`${API_BASE}/api/scans/org/${data.org_job_id}/stream`);
       
-        sse.onmessage = (event) => {
+      sse.onmessage = (event) => {
         const parsed = JSON.parse(event.data);
         if (parsed.error) {
           sse.close();
@@ -292,15 +296,29 @@ export function Dashboard() {
     }
   };
 
-  const handleAbortScan = async () => {
+const handleAbortScan = async (mode: "pending" | "force") => {
     if (!activeOrgJobId) return;
-    setIsAborting(true);
+    if (mode === "force") {
+      if (eventSource) {
+        eventSource.close();
+        setEventSource(null);
+      }
+      setActiveOrgJobId(null);
+      setOrgStatusData(null);
+      setOrgUrl("");
+      setScanLoading(false);
+    } else {
+      setIsAborting(true);
+    }
+    
     try {
-      await abortOrganizationScan(activeOrgJobId);
+      await abortOrganizationScan(activeOrgJobId, mode);
     } catch (err) {
       console.error("Failed to abort scan", err);
     } finally {
-      setIsAborting(false);
+      if (mode !== "force") {
+        setIsAborting(false);
+      }
     }
   };
 
@@ -581,21 +599,34 @@ export function Dashboard() {
 
                 {/* Modal Footer */}
                 <div className="p-6 border-t bg-muted/10 rounded-b-lg flex justify-end gap-3">
-                {(orgStatusData.status === "scanning" || orgStatusData.status === "pending") && (
-                    <Button 
-                      variant="destructive" 
-                      onClick={handleAbortScan}
-                      disabled={isAborting}
-                      className="transition-all hover:bg-red-600 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
-                    >
-                      {isAborting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                      Cancel Scan
-                    </Button>
+                  {(orgStatusData.status === "scanning" || orgStatusData.status === "pending") && (
+                    <>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => handleAbortScan("pending")}
+                        disabled={isAborting}
+                        className="transition-all cursor-pointer hover:bg-muted hover:shadow-sm"
+                      >
+                        {isAborting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                        Cancel Pending Scans
+                      </Button>
+                      
+                      <Button 
+                        variant="destructive" 
+                        onClick={() => handleAbortScan("force")}
+                        disabled={isAborting}
+                        className="transition-all cursor-pointer hover:bg-red-600 hover:shadow-lg hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
+                      >
+                        {isAborting && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                        Force Cancel Scan
+                      </Button>
+                    </>
                   )}
 
                   {["completed", "failed", "aborted"].includes(orgStatusData.status) && (
                     <Button 
                       size="lg"
+                      className="cursor-pointer"
                       onClick={() => {
                         if (eventSource) eventSource.close();
                         setActiveOrgJobId(null);

@@ -270,14 +270,10 @@ export async function getOrgJobStatus(orgJobId: string) {
   return (await res.json()) as OrgJobStatusResponse;
 }
 
-export async function abortOrganizationScan(orgJobId: string) {
-  const res = await fetch(`${API_BASE}/api/scans/org/${orgJobId}/abort`, {
+export const abortOrganizationScan = async (orgJobId: string, mode: "pending" | "force" = "pending") => {
+  const response = await fetch(`${API_BASE}/api/scans/org/${orgJobId}/abort?mode=${mode}`, {
     method: "POST",
   });
-
-  if (!res.ok) {
-    throw new Error(await res.text());
-  }
-
-  return await res.json();
-}
+  if (!response.ok) throw new Error("Failed to abort scan");
+  return response.json();
+};

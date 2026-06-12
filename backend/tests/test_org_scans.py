@@ -109,7 +109,11 @@ def test_abort_org_scan(mock_get_db, client):
     response = client.post("/api/scans/org/123/abort")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "aborted", "org_job_id": "123"}
+    assert response.json() == {
+        "status": "aborted",
+        "org_job_id": "123",
+        "mode": "pending",
+    }
 
 
 @patch("app.main.get_db", new_callable=AsyncMock)

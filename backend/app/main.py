@@ -19,6 +19,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     Request,
     UploadFile,
 )
@@ -996,7 +997,7 @@ async def get_org_status(org_job_id: str):
 
 
 @app.post("/api/scans/org/{org_job_id}/abort")
-async def abort_org_scan(org_job_id: str):
+async def abort_org_scan(org_job_id: str, mode: str = Query("pending")):
     for attempt in range(5):
         try:
             db = await get_db()
@@ -1005,16 +1006,25 @@ async def abort_org_scan(org_job_id: str):
                     "UPDATE org_jobs SET status = 'aborted' WHERE id = ? AND status != 'completed'",
                     (org_job_id,),
                 )
-                await db.execute(
-                    "UPDATE jobs SET status = 'aborted' WHERE org_job_id = ? AND status = 'pending'",
-                    (org_job_id,),
-                )
+                if mode == "force":
+                    await db.execute(
+                        "UPDATE jobs SET status = 'aborted' WHERE org_job_id = ? AND status IN ('pending', 'scanning')",
+                        (org_job_id,),
+                    )
+                else:
+                    await db.execute(
+                        "UPDATE jobs SET status = 'aborted' WHERE org_job_id = ? AND status = 'pending'",
+                        (org_job_id,),
+                    )
+
                 await db.commit()
-                return {"status": "aborted", "org_job_id": org_job_id}
+                return {"status": "aborted", "org_job_id": org_job_id, "mode": mode}
             finally:
                 await db.close()
         except Exception as e:
             if "locked" in str(e).lower() and attempt < 4:
+                import asyncio
+
                 await asyncio.sleep(1)
                 continue
             raise HTTPException(status_code=500, detail=f"Database lock timeout: {e}")
