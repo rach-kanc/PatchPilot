@@ -632,7 +632,7 @@ const handleAbortScan = async (mode: "pending" | "force") => {
                         setActiveOrgJobId(null);
                         setOrgStatusData(null);
                         setOrgUrl("");
-                        navigate("/findings");
+                        navigate(`/org-findings/${activeOrgJobId}`);
                       }}
                     >
                       View Collected Analytics

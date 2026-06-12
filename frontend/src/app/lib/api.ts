@@ -277,3 +277,15 @@ export const abortOrganizationScan = async (orgJobId: string, mode: "pending" | 
   if (!response.ok) throw new Error("Failed to abort scan");
   return response.json();
 };
+
+export async function getOrgSummary(orgJobId: string) {
+  const res = await fetch(`${API_BASE}/api/scans/org/${orgJobId}/summary`);
+  if (!res.ok) throw new Error("Failed to fetch organization summary");
+  return res.json();
+}
+
+export async function getOrgFindings(orgJobId: string) {
+  const res = await fetch(`${API_BASE}/api/scans/org/${orgJobId}/findings`);
+  if (!res.ok) throw new Error("Failed to fetch organization findings");
+  return res.json();
+}
