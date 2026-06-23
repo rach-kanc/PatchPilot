@@ -25,9 +25,8 @@ def embed_findings(findings: list[dict]) -> np.ndarray:
         )
 
     texts = [
-    f"{getattr(finding, 'title', '')} "
-    f"{getattr(finding, 'description', '')}"
-    for finding in findings
-]
+        f"{getattr(finding, 'title', '')} {getattr(finding, 'description', '')}"
+        for finding in findings
+    ]
 
     return MODEL.encode(texts, convert_to_numpy=True)
