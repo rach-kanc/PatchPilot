@@ -62,8 +62,8 @@ from .scanners.entropy import run_entropy
 from .scanners.gitleaks import run_gitleaks
 from .scanners.osv import run_osv_scanner
 from .scanners.semgrep import run_semgrep
-from .utils.fs import ensure_dir, safe_rmtree, unzip_to_dir
 from .utils.exec import run_cmd
+from .utils.fs import ensure_dir, safe_rmtree, unzip_to_dir
 
 _MAX_UPLOAD_MB_RAW = os.environ.get("MAX_UPLOAD_MB")
 RANKER = load_ranker()

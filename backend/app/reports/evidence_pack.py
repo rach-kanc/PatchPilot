@@ -4,8 +4,6 @@ import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..utils.exec import run_cmd
-
 
 def build_evidence_pack(
     repo_dir: Path, out_dir: Path, project_name: str, job_id: str
