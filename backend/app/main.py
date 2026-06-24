@@ -413,7 +413,9 @@ async def _run_single_scan_task(
 
         job_dir = WORK_ROOT / job_id
         semgrep, osv, gitleaks, entropy, findings = await run_in_threadpool(
-            functools.partial(_scan_repo_dir, scan_root, update_progress, job_dir=job_dir)
+            functools.partial(
+                _scan_repo_dir, scan_root, update_progress, job_dir=job_dir
+            )
         )
 
         raw_finding_count = len(findings)
@@ -706,7 +708,10 @@ def evidence_pack(job_id: str = Form(...), project_name: str = Form("project")):
     ensure_dir(out_dir)
 
     pack_path = build_evidence_pack(
-        repo_dir=repo_dir, out_dir=out_dir, project_name=project_name, job_id=job_id,
+        repo_dir=repo_dir,
+        out_dir=out_dir,
+        project_name=project_name,
+        job_id=job_id,
         job_dir=job_dir,
     )
     return FileResponse(
@@ -1056,7 +1061,9 @@ async def _run_repo_scan_task(
             unzip_to_dir(archive_path, repo_dir)
 
             scan_root = _maybe_use_single_top_folder(repo_dir)
-            semgrep, osv, gitleaks, entropy, findings = _scan_repo_dir(scan_root, job_dir=job_dir)
+            semgrep, osv, gitleaks, entropy, findings = _scan_repo_dir(
+                scan_root, job_dir=job_dir
+            )
 
             raw_finding_count = len(findings)
 
