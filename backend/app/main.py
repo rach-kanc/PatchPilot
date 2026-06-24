@@ -803,7 +803,7 @@ async def get_findings(job_id: str):
         cur = await db.execute(
             """
             SELECT id, rule_id, severity, category, file_path,
-                   line_number, cwe, scanner, message, package_name, package_version, created_at, ml_score
+                   line_number, cwe, scanner, message, package_name, package_version, created_at, ml_score, false_positive, labeled_at
             FROM findings
             WHERE job_id = ?
             ORDER BY created_at
@@ -827,6 +827,40 @@ async def get_findings(job_id: str):
         "raw_finding_count": raw_finding_count,
         "finding_count": finding_count,
         "findings": findings,
+    }
+
+
+class LabelFindingRequest(BaseModel):
+    false_positive: bool
+
+
+@app.post("/findings/{finding_id}/label")
+async def label_finding(finding_id: str, payload: LabelFindingRequest):
+    db = await get_db()
+    try:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute("SELECT id FROM findings WHERE id = ?", (finding_id,))
+        if not await cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Finding not found")
+
+        fp_int = 1 if payload.false_positive else 0
+
+        await db.execute(
+            """
+            UPDATE findings 
+            SET false_positive = ?, labeled_at = datetime('now') 
+            WHERE id = ?
+            """,
+            (fp_int, finding_id),
+        )
+        await db.commit()
+    finally:
+        await db.close()
+
+    return {
+        "status": "success",
+        "finding_id": finding_id,
+        "false_positive": payload.false_positive,
     }
 
 

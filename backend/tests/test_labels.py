@@ -1,0 +1,46 @@
+from unittest.mock import AsyncMock, patch
+
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+client = TestClient(app)
+
+
+def test_label_finding_success():
+    """Test that a finding can be successfully labeled as a false positive."""
+    mock_db = AsyncMock()
+    mock_cursor = AsyncMock()
+    mock_cursor.fetchone.return_value = {"id": "fake-finding-123"}
+    mock_db.execute.return_value = mock_cursor
+
+    with patch("app.main.get_db", return_value=mock_db):
+        response = client.post(
+            "/findings/fake-finding-123/label", json={"false_positive": True}
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "finding_id": "fake-finding-123",
+        "false_positive": True,
+    }
+    assert mock_db.execute.call_count == 2
+    assert mock_db.commit.called
+
+
+def test_label_finding_not_found():
+    """Test that labeling a non-existent finding returns a 404."""
+    mock_db = AsyncMock()
+    mock_cursor = AsyncMock()
+    mock_cursor.fetchone.return_value = None
+    mock_db.execute.return_value = mock_cursor
+
+    with patch("app.main.get_db", return_value=mock_db):
+        response = client.post(
+            "/findings/missing-finding-404/label", json={"false_positive": False}
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Finding not found"
+    assert not mock_db.commit.called

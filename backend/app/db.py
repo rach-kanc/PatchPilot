@@ -34,6 +34,8 @@ async def init_db():
                 package_name    TEXT,
                 package_version TEXT,
                 ml_score        REAL,
+                false_positive  INTEGER DEFAULT NULL,
+                labeled_at      TEXT DEFAULT NULL,
                 created_at      TEXT DEFAULT (datetime('now'))
             )
         """)
@@ -85,6 +87,14 @@ async def init_db():
 
         if "ml_score" not in columns:
             await db.execute("ALTER TABLE findings ADD COLUMN ml_score REAL")
+
+        if "false_positive" not in columns:
+            await db.execute(
+                "ALTER TABLE findings ADD COLUMN false_positive INTEGER DEFAULT NULL"
+            )
+            await db.execute(
+                "ALTER TABLE findings ADD COLUMN labeled_at TEXT DEFAULT NULL"
+            )
 
         cursor = await db.execute("PRAGMA table_info(jobs)")
         job_columns = [row["name"] for row in await cursor.fetchall()]
