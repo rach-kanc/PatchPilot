@@ -624,7 +624,7 @@ async def get_baseline_findings(job_id: str):
     try:
         cursor = await db.execute(
             """
-            SELECT rule_id, file_path, line_number
+            SELECT rule_id, file_path
             FROM findings
             WHERE job_id = ?
             """,
@@ -632,14 +632,7 @@ async def get_baseline_findings(job_id: str):
         )
         rows = await cursor.fetchall()
 
-        return {
-            (
-                row[0],
-                row[1],
-                row[2],
-            )
-            for row in rows
-        }
+        return {(row[0], row[1]) for row in rows}
     finally:
         await db.close()
 
