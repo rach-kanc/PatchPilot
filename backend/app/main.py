@@ -369,19 +369,27 @@ async def download_to_path(url: str, dest_path: Path, max_retries: int = 5) -> N
                 jitter = random.uniform(0.5, 1.5)
                 await asyncio.sleep((base_delay * (2**attempt)) + jitter)
 
+
 async def _apply_fp_predictor(findings: List[Finding]) -> None:
     ml_input = []
     for f in findings:
-        rule_id = (f.metadata or {}).get("check_id") or (f.metadata or {}).get("rule") or (f.metadata or {}).get("osv_id") or f.title
-        ml_input.append({
-            "rule_id": rule_id,
-            "message": f.description or f.title,
-            "file_path": f.location.path if f.location else "",
-            "ml_score": getattr(f, "ml_score", 1.0)
-        })
+        rule_id = (
+            (f.metadata or {}).get("check_id")
+            or (f.metadata or {}).get("rule")
+            or (f.metadata or {}).get("osv_id")
+            or f.title
+        )
+        ml_input.append(
+            {
+                "rule_id": rule_id,
+                "message": f.description or f.title,
+                "file_path": f.location.path if f.location else "",
+                "ml_score": getattr(f, "ml_score", 1.0),
+            }
+        )
 
     adjusted_scores = await run_in_threadpool(predictor.adjust_scores, ml_input)
-    
+
     for f, new_score in zip(findings, adjusted_scores):
         f.ml_score = new_score
 
